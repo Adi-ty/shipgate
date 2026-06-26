@@ -1,10 +1,30 @@
 import { execShell } from "../core/exec.js";
 import { finding, stepResult, type StepResult } from "../core/findings.js";
 import type { ResolvedCommand } from "../core/stacks/adapter.js";
+import type { GitPort } from "../ports/git.js";
 
 /** Keep only the last `n` characters of captured output for evidence. */
 export function tail(s: string, n = 4000): string {
   return s.length > n ? s.slice(-n) : s;
+}
+
+/**
+ * Resolve a base branch name into a ref usable for diffs: prefer the
+ * remote-tracking ref `<remote>/<base>`, else a local branch `<base>`, else null.
+ */
+export async function resolveBaseRef(
+  git: GitPort,
+  repoRoot: string,
+  remote: string,
+  base: string,
+): Promise<string | null> {
+  if (await git.remoteBranchExists(repoRoot, remote, base)) return `${remote}/${base}`;
+  try {
+    await git.revParse(repoRoot, base);
+    return base;
+  } catch {
+    return null;
+  }
 }
 
 /**

@@ -38,6 +38,10 @@ export interface GitPort {
   /** Unmerged paths (`--diff-filter=U`), e.g. during a rebase conflict. */
   conflictedFiles(cwd: string): Promise<string[]>;
   diffStat(cwd: string, range: string): Promise<DiffStat>;
+  /** Full unified diff for a range (e.g. "base...head"). */
+  diffText(cwd: string, range: string): Promise<string>;
+  /** Per-file change stats for a range. */
+  diffFiles(cwd: string, range: string): Promise<Array<{ file: string; insertions: number; deletions: number }>>;
   /** `git worktree add --detach <dir> <commitish>`. */
   worktreeAdd(cwd: string, dir: string, commitish: string): Promise<ExecResult>;
   /** `git worktree remove --force <dir>`. */

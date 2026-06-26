@@ -12,6 +12,8 @@ import * as intent from "./commands/intent.js";
 import * as push from "./commands/push.js";
 import * as pr from "./commands/pr.js";
 import * as ciWatch from "./commands/ci-watch.js";
+import * as review from "./commands/review.js";
+import * as doc from "./commands/doc.js";
 
 function emit(result: StepResult, json: boolean): void {
   if (json) printStepResult(result);
@@ -108,6 +110,34 @@ program
   .option("--intent <text>", "set the intent manually (skips transcript reading)")
   .option("--json", "emit machine-readable JSON", false)
   .action((opts) => guard("intent", opts.json, () => intent.run({ repo: opts.repo, intent: opts.intent })));
+
+program
+  .command("review")
+  .description("package the diff vs the resolved base for agent review (always gates on a human)")
+  .requiredOption("--base <branch>", "base/integration branch")
+  .option("--run-branch <name>", "run branch (default: HEAD)")
+  .option("--remote <name>", "remote", "origin")
+  .option("--findings-file <path>", "JSON file of agent-produced findings to merge")
+  .option("--repo <path>", "repo path (default: cwd)")
+  .option("--json", "emit machine-readable JSON", false)
+  .action((opts) =>
+    guard("review", opts.json, () =>
+      review.run({ base: opts.base, runBranch: opts.runBranch, remote: opts.remote, findingsFile: opts.findingsFile, repo: opts.repo }),
+    ),
+  );
+
+program
+  .command("doc")
+  .description("detect doc/changelog gaps for the diff and apply safe updates")
+  .requiredOption("--base <branch>", "base/integration branch")
+  .option("--run-branch <name>", "run branch (default: HEAD)")
+  .option("--remote <name>", "remote", "origin")
+  .option("--intent <text>", "text for an auto-applied changelog bullet")
+  .option("--repo <path>", "repo path (default: cwd)")
+  .option("--json", "emit machine-readable JSON", false)
+  .action((opts) =>
+    guard("doc", opts.json, () => doc.run({ base: opts.base, runBranch: opts.runBranch, remote: opts.remote, intent: opts.intent, repo: opts.repo })),
+  );
 
 program
   .command("lint")

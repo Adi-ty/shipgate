@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { exec, ok, type ExecResult } from "../../src/core/exec.js";
 
 /**
@@ -100,7 +100,9 @@ export async function createFixture(): Promise<GitFixture> {
       return runOrThrow(repo, ["rev-parse", "HEAD"]);
     },
     write(relPath, content) {
-      writeFileSync(join(repo, relPath), content);
+      const p = join(repo, relPath);
+      mkdirSync(dirname(p), { recursive: true });
+      writeFileSync(p, content);
     },
     async branch(name, from) {
       await runOrThrow(repo, from ? ["branch", name, from] : ["branch", name]);

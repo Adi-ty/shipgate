@@ -107,6 +107,30 @@ export async function diffStat(cwd: string, range: string): Promise<DiffStat> {
   return { files, insertions, deletions };
 }
 
+export function diffText(cwd: string, range: string): Promise<string> {
+  return gitText(cwd, ["diff", range]);
+}
+
+export async function diffFiles(
+  cwd: string,
+  range: string,
+): Promise<Array<{ file: string; insertions: number; deletions: number }>> {
+  const out = await gitText(cwd, ["diff", "--numstat", range]);
+  const files: Array<{ file: string; insertions: number; deletions: number }> = [];
+  for (const line of out.split("\n")) {
+    if (!line.trim()) continue;
+    const [ins, del, ...rest] = line.split("\t");
+    const file = rest.join("\t");
+    if (!file) continue;
+    files.push({
+      file,
+      insertions: ins && ins !== "-" ? Number.parseInt(ins, 10) || 0 : 0,
+      deletions: del && del !== "-" ? Number.parseInt(del, 10) || 0 : 0,
+    });
+  }
+  return files;
+}
+
 export function worktreeAdd(cwd: string, dir: string, commitish: string): Promise<ExecResult> {
   return git(cwd, ["worktree", "add", "--detach", dir, commitish]);
 }
@@ -150,6 +174,8 @@ export const realGit: GitPort = {
   rebaseAbort,
   conflictedFiles,
   diffStat,
+  diffText,
+  diffFiles,
   worktreeAdd,
   worktreeRemove,
   worktreePrune,
