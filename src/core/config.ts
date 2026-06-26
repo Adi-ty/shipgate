@@ -16,6 +16,8 @@ export interface ShipgateConfig {
     integrationBranches: string[];
     releaseGlobs: string[];
   };
+  /** Where `push` sends the run branch. A fork URL may differ from the PR-base repo. */
+  push: { remote?: string; url?: string };
   source: "default" | "file";
   configPath?: string;
 }
@@ -27,6 +29,7 @@ export const DEFAULT_CONFIG: Omit<ShipgateConfig, "source" | "configPath"> = {
     integrationBranches: ["main", "master", "develop"],
     releaseGlobs: ["release/*"],
   },
+  push: {},
 };
 
 const CONFIG_FILENAMES = [".shipgate.yaml", ".shipgate.yml"];
@@ -68,6 +71,13 @@ export function parseConfigObject(raw: unknown): Partial<ShipgateConfig> {
     out.base = base as ShipgateConfig["base"];
   }
 
+  if (isRecord(raw.push)) {
+    const push: ShipgateConfig["push"] = {};
+    if (typeof raw.push.remote === "string") push.remote = raw.push.remote;
+    if (typeof raw.push.url === "string") push.url = raw.push.url;
+    out.push = push;
+  }
+
   return out;
 }
 
@@ -83,6 +93,7 @@ function merge(
       integrationBranches: override?.base?.integrationBranches ?? base.base.integrationBranches,
       releaseGlobs: override?.base?.releaseGlobs ?? base.base.releaseGlobs,
     },
+    push: { ...base.push, ...override?.push },
   };
 }
 

@@ -30,6 +30,8 @@ export interface GitPort {
   /** Number of commits in a revision range (e.g. "A..B"). */
   revListCount(cwd: string, range: string): Promise<number>;
   fetch(cwd: string, remote: string, ref?: string): Promise<ExecResult>;
+  /** `git push [--force|--force-with-lease] <target> <refspec>`. target may be a remote name or URL. */
+  push(cwd: string, target: string, refspec: string, opts?: { force?: boolean; forceWithLease?: boolean }): Promise<ExecResult>;
   /** `git rebase <upstream> [branch]` — passing branch checks it out first. */
   rebase(cwd: string, upstream: string, branch?: string): Promise<ExecResult>;
   rebaseAbort(cwd: string): Promise<ExecResult>;

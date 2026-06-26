@@ -9,6 +9,9 @@ import * as rebase from "./commands/rebase.js";
 import * as lint from "./commands/lint.js";
 import * as test from "./commands/test.js";
 import * as intent from "./commands/intent.js";
+import * as push from "./commands/push.js";
+import * as pr from "./commands/pr.js";
+import * as ciWatch from "./commands/ci-watch.js";
 
 function emit(result: StepResult, json: boolean): void {
   if (json) printStepResult(result);
@@ -120,6 +123,49 @@ program
   .option("--repo <path>", "repo path (default: cwd)")
   .option("--json", "emit machine-readable JSON", false)
   .action((opts) => guard("test", opts.json, () => test.run({ repo: opts.repo })));
+
+program
+  .command("push")
+  .description("push the validated run branch to its target (remote or fork URL)")
+  .option("--run-branch <name>", "run branch (default: current branch)")
+  .option("--remote <name>", "named remote to push to (default: origin / config)")
+  .option("--url <url>", "explicit push URL (e.g. a fork), overrides --remote")
+  .option("--repo <path>", "repo path (default: cwd)")
+  .option("--json", "emit machine-readable JSON", false)
+  .action((opts) =>
+    guard("push", opts.json, () => push.run({ runBranch: opts.runBranch, remote: opts.remote, url: opts.url, repo: opts.repo })),
+  );
+
+program
+  .command("pr")
+  .description("create or update the PR (base = resolved branch, body from intent)")
+  .requiredOption("--base <branch>", "base/integration branch")
+  .option("--run-branch <name>", "head branch (default: current branch)")
+  .option("--title <text>", "PR title (default: from intent)")
+  .option("--body <text>", "PR body (default: from intent)")
+  .option("--body-file <path>", "read the PR body from a file")
+  .option("--draft", "open as a draft", false)
+  .option("--repo <path>", "repo path (default: cwd)")
+  .option("--json", "emit machine-readable JSON", false)
+  .action((opts) =>
+    guard("pr", opts.json, () =>
+      pr.run({ base: opts.base, runBranch: opts.runBranch, title: opts.title, body: opts.body, bodyFile: opts.bodyFile, draft: opts.draft, repo: opts.repo }),
+    ),
+  );
+
+program
+  .command("ci-watch")
+  .description("poll CI + mergeability until green, failed, or timeout")
+  .option("--run-branch <name>", "run branch (default: current branch)")
+  .option("--interval <seconds>", "poll interval in seconds", "15")
+  .option("--timeout <seconds>", "overall timeout in seconds", "600")
+  .option("--repo <path>", "repo path (default: cwd)")
+  .option("--json", "emit machine-readable JSON", false)
+  .action((opts) =>
+    guard("ci-watch", opts.json, () =>
+      ciWatch.run({ runBranch: opts.runBranch, intervalS: Number(opts.interval), timeoutS: Number(opts.timeout), repo: opts.repo }),
+    ),
+  );
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : err);

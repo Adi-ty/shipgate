@@ -65,6 +65,19 @@ export function fetch(cwd: string, remote: string, ref?: string): Promise<ExecRe
   return git(cwd, ref ? ["fetch", remote, ref] : ["fetch", remote]);
 }
 
+export function push(
+  cwd: string,
+  target: string,
+  refspec: string,
+  opts: { force?: boolean; forceWithLease?: boolean } = {},
+): Promise<ExecResult> {
+  const args = ["push"];
+  if (opts.forceWithLease) args.push("--force-with-lease");
+  else if (opts.force) args.push("--force");
+  args.push(target, refspec);
+  return git(cwd, args);
+}
+
 export function rebase(cwd: string, upstream: string, branch?: string): Promise<ExecResult> {
   return git(cwd, branch ? ["rebase", upstream, branch] : ["rebase", upstream]);
 }
@@ -132,6 +145,7 @@ export const realGit: GitPort = {
   isAncestor,
   revListCount,
   fetch,
+  push,
   rebase,
   rebaseAbort,
   conflictedFiles,

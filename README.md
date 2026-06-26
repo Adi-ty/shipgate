@@ -27,6 +27,9 @@ shipgate base                   # resolve the integration/base branch
 shipgate rebase --base <branch> # rebase the run branch onto the resolved base
 shipgate lint [--fix]           # run the project's lint command (auto-fix optional)
 shipgate test                   # run the project's test command
+shipgate push                   # push the run branch (supports a fork URL)
+shipgate pr --base <branch>     # create/update the PR, body built from intent
+shipgate ci-watch               # poll CI + mergeability until green/failed/timeout
 shipgate worktree remove        # tear down the worktree
 ```
 

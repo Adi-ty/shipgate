@@ -11,8 +11,8 @@ JSON when you pass `--json`. Your job is to run the steps in order, read their J
 decide what to do next. Never reimplement what a command does — call the command.
 
 > Status: this CLI build implements `intent`, `worktree`, `base`, `rebase`, `lint`,
-> `test`. The later steps (`review`, `doc`, `push`, `pr`, `ci-watch`) are not wired yet —
-> stop after `test` and summarize.
+> `test`, `push`, `pr`, `ci-watch`. Only `review` (agent critiques the diff) and `doc`
+> are not wired yet — skip them.
 
 ## How to read every command's output
 
@@ -87,10 +87,35 @@ shipgate test --json
 - `findings` with `action: auto-fix`: read `evidence.stdoutTail`, fix the code or tests,
   re-run `shipgate test --json`, at most **3 times**, then **stop** and ask the human.
 
-### 5. finish
-Summarize what ran: resolved base + rule, commits rebased, lint outcome (and whether you
-auto-fixed), test outcome. State clearly that `review`/`doc`/`push`/`pr` are not yet
-available in this build.
+### 5. push — publish the validated run branch
+```
+shipgate push --run-branch <branch> --json
+```
+- `passed` → continue. `failed` (`push.failed`) → **stop**; show `evidence.stderrTail`.
+- Pushes to `origin` by default (or a configured fork remote/URL).
+
+### 6. pr — create or update the pull request
+```
+shipgate pr --base <data.resolvedBase from step 1> --run-branch <branch> --json
+```
+- The body is built from the `intent` summary automatically; pass `--title`/`--body` to
+  override.
+- `passed` → note `data.action` (`created`/`updated`) and `data.url`. `failed`
+  (`pr.failed`) → **stop** and show the error (often an auth/permission issue).
+
+### 7. ci-watch — wait for CI + mergeability
+```
+shipgate ci-watch --run-branch <branch> --json
+```
+- `passed` → CI is green and mergeable — **done**.
+- `findings`: `ci.failed` (fix the checks), `ci.not-mergeable` (rebase + re-push from
+  step 2), or `ci.timeout` (still pending) → **stop** and report.
+- `skipped`: `ci.no-pr` or `ci.no-checks` → nothing to wait on.
+
+### 8. finish
+Summarize what ran: resolved base + rule, commits rebased, lint/test outcomes (and any
+auto-fixes), the PR URL, and the CI result. `review` and `doc` are not wired in this
+build — mention they were skipped.
 
 ## Isolation (optional but recommended)
 

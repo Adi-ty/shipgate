@@ -38,7 +38,7 @@ describe("resolveBase", () => {
 
     expect(result.status).toBe("passed");
     expect(result.data).toMatchObject({ rule: "open-pr", resolvedBase: "release/v2", runBranch: RUN });
-    expect(gh.calls).toEqual([RUN]);
+    expect(gh.calls).toEqual([`viewBase:${RUN}`]);
     expect(result.evidence).toMatchObject({ ghPrBaseRefName: "release/v2" });
   });
 
