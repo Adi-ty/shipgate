@@ -1,7 +1,15 @@
 ---
 name: shipgate
-description: Use when finishing or shipping an AI agent's changes — run the validation pipeline that turns a rough branch into a clean, verified pull request: capture intent, resolve the base, rebase, review the diff, test, document, lint, push, open the PR, and watch CI. Triggers on "ship", "ship it", "ship this branch", "run shipgate", "open a PR", "validate / clean up / finish these changes before they go out", or when a shipgate step has gone red and needs to be made green.
-compatibility: Requires the `shipgate` CLI on PATH (Node >= 20), git, and `gh` for the push/pr/ci-watch steps. Filesystem-based agent with bash.
+description: >-
+  Use when finishing or shipping an AI agent's changes — run the validation pipeline
+  that turns a rough branch into a clean, verified pull request: capture intent, resolve
+  the base, rebase, review the diff, test, document, lint, push, open the PR, and watch
+  CI. Triggers on "ship", "ship it", "ship this branch", "run shipgate", "open a PR",
+  "validate / clean up / finish these changes before they go out", or when a shipgate
+  step has gone red and needs to be made green.
+compatibility: >-
+  Requires the `shipgate` CLI on PATH (Node >= 20), git, and `gh` for the push/pr/ci-watch
+  steps. Filesystem-based agent with bash.
 ---
 
 # shipgate
