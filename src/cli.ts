@@ -8,6 +8,7 @@ import * as base from "./commands/base.js";
 import * as rebase from "./commands/rebase.js";
 import * as lint from "./commands/lint.js";
 import * as test from "./commands/test.js";
+import * as intent from "./commands/intent.js";
 
 function emit(result: StepResult, json: boolean): void {
   if (json) printStepResult(result);
@@ -96,6 +97,14 @@ program
       rebase.run({ base: opts.base, runBranch: opts.runBranch, remote: opts.remote, repo: opts.repo }),
     ),
   );
+
+program
+  .command("intent")
+  .description("summarize what the agent session was trying to do (for the PR body)")
+  .option("--repo <path>", "repo path (default: cwd)")
+  .option("--intent <text>", "set the intent manually (skips transcript reading)")
+  .option("--json", "emit machine-readable JSON", false)
+  .action((opts) => guard("intent", opts.json, () => intent.run({ repo: opts.repo, intent: opts.intent })));
 
 program
   .command("lint")

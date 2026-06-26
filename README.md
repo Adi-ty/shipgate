@@ -21,6 +21,7 @@ Requires Node ≥ 20 and git (and `gh` for the GitHub steps).
 Every command is non-interactive and supports `--json` for machine-readable output.
 
 ```bash
+shipgate intent                 # summarize the agent session (reads its transcript)
 shipgate worktree create        # isolated detached worktree on a run-scoped branch
 shipgate base                   # resolve the integration/base branch
 shipgate rebase --base <branch> # rebase the run branch onto the resolved base
