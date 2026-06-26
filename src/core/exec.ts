@@ -129,3 +129,13 @@ export function exec(command: string, args: string[] = [], opts: ExecOptions = {
 export function ok(r: ExecResult): boolean {
   return r.exitCode === 0 && !r.timedOut;
 }
+
+/**
+ * Run a full command line through `/bin/sh -c`. This is how user/adapter-provided
+ * commands (e.g. "npm run lint", "vendor/bin/phpcs --standard=phpcs.xml") execute —
+ * a missing binary surfaces as the shell's exit 127, not a spawn ENOENT.
+ * Reuses the single `exec` choke point for timeout/buffer handling.
+ */
+export function execShell(commandLine: string, opts: ExecOptions = {}): Promise<ExecResult> {
+  return exec("/bin/sh", ["-c", commandLine], opts);
+}

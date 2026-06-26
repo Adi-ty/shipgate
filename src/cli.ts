@@ -6,6 +6,8 @@ import type { StepResult } from "./core/findings.js";
 import * as worktree from "./commands/worktree.js";
 import * as base from "./commands/base.js";
 import * as rebase from "./commands/rebase.js";
+import * as lint from "./commands/lint.js";
+import * as test from "./commands/test.js";
 
 function emit(result: StepResult, json: boolean): void {
   if (json) printStepResult(result);
@@ -94,6 +96,21 @@ program
       rebase.run({ base: opts.base, runBranch: opts.runBranch, remote: opts.remote, repo: opts.repo }),
     ),
   );
+
+program
+  .command("lint")
+  .description("run the resolved lint command (stack-detected or configured)")
+  .option("--repo <path>", "repo path (default: cwd)")
+  .option("--fix", "apply the auto-fixable subset before checking", false)
+  .option("--json", "emit machine-readable JSON", false)
+  .action((opts) => guard("lint", opts.json, () => lint.run({ repo: opts.repo, fix: opts.fix })));
+
+program
+  .command("test")
+  .description("run the resolved test command (stack-detected or configured)")
+  .option("--repo <path>", "repo path (default: cwd)")
+  .option("--json", "emit machine-readable JSON", false)
+  .action((opts) => guard("test", opts.json, () => test.run({ repo: opts.repo })));
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err instanceof Error ? err.message : err);
