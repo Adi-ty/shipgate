@@ -1,137 +1,138 @@
 ---
 name: shipgate
-description: Ship an AI agent's rough changes through shipgate's validation pipeline — capture intent, resolve the base branch, rebase, review the diff, test, document, lint, push, open the PR, and watch CI — reading each command's JSON to decide auto-fix vs pause-for-human. Use when the user asks to "ship", "ship it", "run shipgate", or open a clean PR from the current branch.
+description: Use when finishing or shipping an AI agent's changes — run the validation pipeline that turns a rough branch into a clean, verified pull request: capture intent, resolve the base, rebase, review the diff, test, document, lint, push, open the PR, and watch CI. Triggers on "ship", "ship it", "ship this branch", "run shipgate", "open a PR", "validate / clean up / finish these changes before they go out", or when a shipgate step has gone red and needs to be made green.
+compatibility: Requires the `shipgate` CLI on PATH (Node >= 20), git, and `gh` for the push/pr/ci-watch steps. Filesystem-based agent with bash.
 ---
 
-# shipgate — pipeline brain
+# shipgate
 
 You orchestrate the `shipgate` CLI. **You are the brain; the CLI is the hands.** Each
-command is deterministic, shells out to real tools, and emits a typed `StepResult` as
-JSON when you pass `--json`. Your job is to run the steps in order, read their JSON, and
-decide what to do next. Never reimplement what a command does — call the command.
+command is deterministic, shells out to real tools, does no AI work itself, and emits a
+typed `StepResult` as JSON. Your job is one loop, repeated per step:
 
-## How to read every command's output
+> **run the step → read its JSON → verify the outcome → fix what's fixable → re-run; pause for the human at a gate.**
 
-Always invoke with `--json`. Each result is:
+Never reimplement what a command does — call the command and react to its JSON.
+
+## When to use
+
+Use this skill whenever changes are finished (or nearly finished) and need to become a
+clean, merge-ready PR — and whenever a shipgate step has gone red and the user wants it
+made green. Concretely:
+
+- "ship this branch", "ship it", "run shipgate", "open a clean PR from my current work".
+- Validate / clean up / finish changes before they go out — rebase onto the right base,
+  review the diff, run tests and lint, update docs, push, and open the PR.
+- A step failed (lint or tests red, CI failing, a rebase conflict) and you need it
+  diagnosed, fixed, and re-run to green.
+- You're an agent that just finished editing and want to self-check before handing back.
+
+Not for: writing fresh code unrelated to shipping, or one-off git/gh commands the user
+asked for directly — just run those.
+
+## Inputs required
+
+- A git repo with the work on a branch (the **run branch**; default: the current branch).
+- The `shipgate` CLI on PATH. Run **every** command with `--json` and read the result.
+- For `push`/`pr`/`ci-watch`: a configured remote and an authenticated `gh`.
+- Optional `.shipgate.yaml` (test/lint/format commands, base rules, push target).
+  See: `references/stacks.md`.
+
+## How to read a StepResult
 
 ```json
 { "step": "...", "status": "passed|findings|skipped|failed", "findings": [...], "data": {...}, "evidence": {...} }
 ```
 
-- `status`: `passed` (move on), `skipped` (move on; may carry a skip signal), `findings`
-  (inspect them), `failed` (a command/environment error — stop and tell the human).
-- Each finding has an `action`:
-  - `auto-fix` → fix it yourself, then re-run the step (bounded loop, below).
-  - `ask-user` → **stop and hand control to the human**; do not guess.
-  - `no-op` → informational only.
-- Decision values live in `data` (e.g. `data.resolvedBase`, `data.skipRemaining`);
-  `evidence` is raw detail for your reasoning (diffs, tool output, candidate distances).
+- **status** — `passed` (move on), `skipped` (move on; check `data` for signals like
+  `skipRemaining`), `findings` (inspect them), `failed` (the tool itself errored — usually
+  an environment problem; stop and tell the human).
+- **findings[].action** — `auto-fix` (you fix it, re-run), `ask-user` (**stop, hand to the
+  human**), `no-op` (informational).
+- **data** = decisions you act on (`resolvedBase`, `skipRemaining`, `url`). **evidence** =
+  raw context for *how* to fix (`stdoutTail`, the diff, CI checks).
 
-## The fixed step order
+Full schema + every finding id: `references/findings.md`.
 
-Run from the repo you want to ship. Do not reorder.
+## Procedure
 
-### 1. intent — capture what the session was trying to do (for the PR body)
-```
-shipgate intent --json
-```
-- `passed` → keep `data.summary` (and `data.sessionId`); it seeds the PR body and the
-  changelog. `data.matchScore < 1` → several transcripts exist; treat as a hint.
-- `skipped` (`intent.no-transcript`) → pass `--intent "..."` or write the body yourself.
-Informational — never gates, never decides the base.
+Run from the repo (or an isolated worktree — see below). Carry `data.resolvedBase` from
+step 2 into every later `--base`. Pass `--json` every time.
 
-### 2. base — resolve the integration branch
-```
-shipgate base --json
-```
-- `passed` → read `data.resolvedBase` (use it for every later `--base`). Note `data.rule`.
-- `findings`/`ask-user` (ambiguous / missing override) → **stop**, show candidates, ask.
+| # | Command | Verify / act on |
+|---|---------|-----------------|
+| 1 | `shipgate intent --json` | Keep `data.summary` (PR body + changelog seed). `skipped` → pass `--intent "…"`. Never decides the base. |
+| 2 | `shipgate base --json` | `passed` → use `data.resolvedBase`. `ask-user` (ambiguous/missing) → **stop, show candidates**. |
+| 3 | `shipgate rebase --base <resolvedBase> --json` | `skipped` + `data.skipRemaining` → **stop, nothing to ship**. conflict → **stop**. |
+| 4 | `shipgate review --base <resolvedBase> --json` | Read `evidence.diff`, **review it yourself** (record findings via `--findings-file` if useful). Always carries `review.gate` → **present your review and STOP for human approval.** |
+| 5 | `shipgate test --json` | `findings`/auto-fix → fix **test-first** (below), re-run until green (≤3×). |
+| 6 | `shipgate doc --base <resolvedBase> --intent "<summary>" --json` | Check `data.applied`; `doc.changelog-gap`/auto-fix → add the entry. |
+| 7 | `shipgate lint --json` | `findings`/auto-fix → `shipgate lint --fix --json`, re-run; else fix from `evidence.stdoutTail` (≤3×). |
+| 8 | `shipgate push --run-branch <branch> --json` | `failed` → **stop**, show `evidence.stderrTail`. |
+| 9 | `shipgate pr --base <resolvedBase> --run-branch <branch> --json` | Body comes from intent. Note `data.action` + `data.url`. `failed` → **stop**. |
+| 10 | `shipgate ci-watch --run-branch <branch> --json` | `passed` → green + mergeable, **done**. `ci.failed`/`not-mergeable`/`timeout` → fix loop, see `references/fixing.md`. |
 
-### 3. rebase — rebase the run branch onto the resolved base
-```
-shipgate rebase --base <data.resolvedBase> --json
-```
-- `skipped` + `data.skipRemaining === true` → branch is empty vs base; **stop**, nothing to ship.
-- `findings` (conflict → `ask-user`) → **stop**; the human resolves it.
-- `passed` → continue.
+Exact flags + JSON for any step: `references/commands.md`.
 
-### 4. review — always pause for a human
-```
-shipgate review --base <resolvedBase> --json
-```
-- `skipped` (`review.no-changes`) → nothing to review; continue.
-- `findings` → read `evidence.diff` and **review the change yourself**. If you find
-  issues, you may write them to a JSON file and re-run with `--findings-file <path>` to
-  record them. The result always carries a `review.gate` `ask-user` finding:
-  **present your review and STOP for human approval before continuing.**
+## Verification
 
-### 5. test — with the auto-fix loop
-```
-shipgate test --json
-```
-- `passed`/`skipped` → continue. `failed` (exit 127) → **stop**; runner not installed.
-- `findings`/`auto-fix`: read `evidence.stdoutTail`, fix code/tests, re-run, at most
-  **3 times**, then **stop** and ask the human.
+A ship is done only when each of these is true from the actual JSON (not your assumption):
 
-### 6. doc — close doc/changelog gaps
-```
-shipgate doc --base <resolvedBase> --intent "<data.summary from step 1>" --json
-```
-- `passed` → check `data.applied` (a changelog bullet may have been added) and any
-  `no-op` notes (`doc.api-surface`, `doc.no-changelog`) — address docs if warranted.
-- `findings`/`auto-fix` (`doc.changelog-gap`): add the changelog entry yourself, then
-  continue.
+- `base` resolved (note the rule) and `rebase` passed — or `skipped` because the branch is
+  empty (then you're done; nothing to ship).
+- `review` was presented and **a human approved it**.
+- `test` `passed` and `lint` `passed` — and after any `--fix`, a **plain re-run** returned
+  `passed` (a fix isn't real until the step re-runs clean on its own).
+- `doc` either applied an entry (`data.applied`) or reported the gap.
+- `push` passed; `pr` returned a `data.url`; `ci-watch` returned `passed`.
 
-### 7. lint — with the auto-fix loop
-```
-shipgate lint --json
-```
-- `passed`/`skipped` → continue. `failed` (exit 127) → **stop**; tool not installed.
-- `findings`/`auto-fix`: run `shipgate lint --fix --json`, re-run `shipgate lint --json`;
-  if still failing, read `evidence.stdoutTail`, fix the code, re-run — at most **3 times**,
-  then **stop** and ask the human.
+## Failure modes & fixing (test-driven)
 
-### 8. push — publish the validated run branch
-```
-shipgate push --run-branch <branch> --json
-```
-- `passed` → continue. `failed` (`push.failed`) → **stop**; show `evidence.stderrTail`.
+shipgate verifies; **you** fix, and a fix is only real once the step re-runs green. When a
+step is red, make it green **test-first** — this is how you avoid "fixes" that don't
+actually fix:
 
-### 9. pr — create or update the pull request
-```
-shipgate pr --base <resolvedBase> --run-branch <branch> --json
-```
-- Body is built from the `intent` summary automatically; `--title`/`--body` override.
-- `passed` → note `data.action` + `data.url`. `failed` (`pr.failed`) → **stop**.
+- **A failing test is your red.** Read `evidence.stdoutTail`, understand *why* it failed,
+  change the **code** until it passes. **Never edit a test just to make it pass** — that
+  hides the bug instead of fixing it.
+- **If a defect has no test** (a bug review surfaced, or a CI failure no local test
+  catches): **write a failing test that reproduces it first**, watch it go red, then fix
+  the code until it's green. The new test ships with the change and guards the regression.
+- **Never "fix" code you haven't watched fail.** If you can't make it go red→green, you
+  don't yet understand the failure — say so rather than guessing.
+- **Lint** is mechanical, not TDD: run `shipgate lint --fix`, then re-run `shipgate lint`.
+- **Bound every fix loop to ~3 attempts.** Still red? Stop and hand the human what you
+  tried and what still fails — a fourth blind attempt erodes trust.
+- **CI failures** are remote — the cause isn't in the result. Fetch it (`gh run view
+  --log-failed`), then apply the same test-first fix and loop back through `push` →
+  `ci-watch` (≤2 rounds).
 
-### 10. ci-watch — wait for CI + mergeability
-```
-shipgate ci-watch --run-branch <branch> --json
-```
-- `passed` → green and mergeable — **done**.
-- `findings`: `ci.failed` (fix checks), `ci.not-mergeable` (rebase + re-push from step 3),
-  or `ci.timeout` → **stop** and report.
-- `skipped` (`ci.no-pr` / `ci.no-checks`) → nothing to wait on.
+The full per-step playbook (commands, the CI recovery sequence, what's fixable vs not):
+`references/fixing.md` — load it the moment a step returns `findings` or `failed`.
 
-### finish
-Summarize: resolved base + rule, commits rebased, the review outcome (human-approved?),
-test + lint results (and any auto-fixes), doc/changelog updates, the PR URL, and the CI
-result.
+## Escalation — when to STOP for the human (non-negotiable)
 
-## Isolation (optional but recommended)
+- **`review` always stops for human approval** — `review.gate` is not optional.
+- **Any `ask-user` finding → pause.** Never auto-pick a base, force past a conflict,
+  silence a missing tool, or merge over red CI.
+- **`failed` is an environment problem** (missing tool, auth, no GitHub host) — surface
+  the message; don't try to "fix" it in code.
+- When you stop, give the human the finding's `message`, the relevant `data`/`evidence`,
+  and a one-line recommendation.
 
-Run the pipeline in a disposable sandbox instead of the live checkout:
+## Isolation (recommended)
+
+Run the pipeline in a disposable sandbox so the live checkout is untouched:
 ```
-shipgate worktree create --json     # → data.path, data.branch
-# ... run the steps against the run branch ...
+shipgate worktree create --json     # → data.path, data.branch (shipgate/run-<id>)
+# ... run the steps against data.branch ...
 shipgate worktree remove --json
 ```
 
-## Gates — non-negotiable
+## References (load on demand)
 
-- **`review` always stops for human approval.** Never skip the `review.gate`.
-- **Any `ask-user` finding → pause for the human.** Never auto-pick a base, never force
-  past a rebase conflict, never silence a failing tool or a red CI.
-- Auto-fix loops are **bounded** (3 attempts each). When the budget is spent and blocking
-  findings remain, pause — do not keep grinding.
-- A `failed` status is an environment problem, not a code problem — surface it, don't fix.
+- `references/commands.md` — every command: flags, exact JSON, status + finding ids.
+- `references/findings.md` — the StepResult/Finding schema, the action model, exit codes.
+- `references/fixing.md` — the test-driven verify→fix playbook, incl. the CI recovery loop.
+- `references/stacks.md` — how `test`/`lint` resolve commands; the `.shipgate.yaml` override.
+- `references/agents.md` — how `intent` reads the session transcript; the invocation seam.
